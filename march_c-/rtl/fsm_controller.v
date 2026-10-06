@@ -162,8 +162,7 @@ module fsm_controller #(
 
             // M3: ↓(r0, w1) — descending
             ST_M3_RD: begin
-                addr_gen_direction = 1'b1;      // DOWN — held so comparator
-                next_state         = ST_M3_WR;  // direction is stable in WR
+                next_state         = ST_M3_WR;  
             end
 
             ST_M3_WR: begin

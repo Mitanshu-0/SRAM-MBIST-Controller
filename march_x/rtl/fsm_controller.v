@@ -151,7 +151,7 @@ module fsm_controller #(
             // M2: ↓(r1, w0) — same structure as M1 but descending, expect 1
             // -----------------------------------------------------------------
             ST_M2_RD: begin
-                addr_gen_direction = 1'b1;      // DOWN — hold so direction is
+                //addr_gen_direction = 1'b1;      // DOWN — hold so direction is
                 next_state         = ST_M2_WR;  // stable in WR cycle
             end
 

@@ -32,7 +32,7 @@ These blocks interface with a **single-port synchronous SRAM**.
 ### MBIST Architecture
 
 <p align="center">
-  <img src="docs/sram_mbist_architecture.svg" alt="SRAM MBIST Controller Architecture" width="850">
+  <img src="docs/genus_reports/sram_mbist_architecture.svg" alt="SRAM MBIST Controller Architecture" width="850">
 </p>
 
 The architecture diagram above is stored in the repository at:

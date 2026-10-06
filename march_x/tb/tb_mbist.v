@@ -105,7 +105,7 @@ module tb_mbist;
         $dumpfile("mbist_march_x.vcd");
         $dumpvars(0, tb_mbist);
         $display("==============================================");
-        $display("  MBIST — March X");
+        $display("  MBIST - March X");
         $display("  Sequence: {up(w0); up(r0,w1); dn(r1,w0); dn(r0)}");
         $display("  Operations: 6N  |  Coverage: SAF, TF, CFin");
         $display("==============================================");
@@ -155,7 +155,7 @@ module tb_mbist;
 
     initial begin
         #1_000_000;
-        $display("WATCHDOG: timeout");
+        $display("[%0t ns] FAIL | WATCHDOG: simulation timeout - bist_done never asserted", $time);
         $finish;
     end
 

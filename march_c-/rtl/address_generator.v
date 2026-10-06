@@ -29,6 +29,6 @@ module address_generator #(
             addr <= direction ? (addr - 1'b1) : (addr + 1'b1);
     end
 
-    assign done = enable & (direction ? (addr == {ADDR_WIDTH{1'b0}})
+    assign done = enable & (direction ? (addr == 0)
                                       : (addr == MAX_ADDR));
 endmodule

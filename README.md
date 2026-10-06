@@ -148,8 +148,64 @@ Reports live under `docs/genus_reports/<variant>/`:
 | `<variant>.sdc`, `mbist.sdc` | timing constraints used |
 | `run.tcl` | Genus script used to produce the above |
 
-## Status / TODO
+### Results
 
-- [ ] Add a summary table comparing area/power/timing across the three variants
-- [ ] Document specific fault-injection test cases per variant
-- [ ] CI to auto-run simulations on push
+All three synthesized against a 2.0 ns (500 MHz) clock constraint, `slow`
+corner, `mbist_top` as top:
+
+| Metric | March C- | March X | March Y |
+|---|---|---|---|
+| Cell count | 94 | 82 | 118 |
+| Total area | 532.86 | 466.25 | 578.27 |
+| Total power | 85.2 µW | 77.0 µW | 171.0 µW |
+| Critical path delay | 1721 ps | 1425 ps | 1466 ps |
+| Setup slack @ 2.0 ns | 70 ps | 416 ps | 358 ps |
+| Max theoretical Fmax | ~581 MHz | ~702 MHz | ~682 MHz |
+| Operations | 10N | 6N | 8N |
+
+**Takeaways:**
+- **March X is the cheapest and fastest** across every metric — fewest
+  states (8), fewest cells, lowest power, shortest critical path. Makes
+  sense: it's the least ambitious algorithm (SAF/TF/CFin only, no CFid).
+- **March Y costs more than March C- on area and power**, despite doing
+  *fewer* operations (8N vs 10N) and having the *same* state count (12).
+  The read-back verification states (`RD2`/`CMP` per element) add combinational
+  compare/mux logic on top of the FSM, which shows up directly in power —
+  March Y's `logic` category is 41.8% of total power vs. ~11% for the other
+  two, and switching power alone (3.77e-05 W) is roughly 4x March C-'s. So
+  operation count (N) doesn't map cleanly to hardware cost — *what* each
+  operation does (plain read vs. read-with-verify) matters more than *how
+  many* there are.
+- **March C-'s critical path runs through the FSM's `bist_pass` decode
+  logic** (12-deep combinational chain from `state_reg[1]` to
+  `bist_pass_reg`), while March X/Y's critical paths run through the
+  address generator/state register — consistent with March C- having the
+  most states to decode into a single pass/fail bit.
+
+## Fault-injection tests
+
+All three testbenches (`tb_mbist.v`) run the same 5-test sequence against
+`memory_model.v`'s built-in fault-injection tasks (`inject_stuck_at`,
+`inject_corruption`), so results are directly comparable variant-to-variant:
+
+| Test | What it does | Expected `bist_pass` |
+|---|---|---|
+| **T1 — Clean memory** | Run BIST with no faults injected | `1` (pass) |
+| **T2 — Mid-run stuck-at fault** | Start BIST, wait 10 cycles, inject SA1 (`0xFF`) at address 5 while the test is running | `0` (fail) |
+| **T3 — Multiple stuck-at faults** | Start BIST, wait 10 cycles, inject SA1 at addr 2 and SA0 at addr 7 | `0` (fail) |
+| **T4 — Pre-existing faults** | Inject faults at addr 0 and 3 *before* `bist_start` is asserted | `0` (fail) |
+| **T5 — Back-to-back clean runs** | Two consecutive clean runs after reset, verifies `bist_pass`/error state clears properly between runs and isn't sticky | `1`, `1` (pass, pass) |
+
+`memory_model.v` also exposes `inject_corruption` (arbitrary single-shot bit
+corruption vs. a persistent stuck-at fault) — defined but not currently
+exercised by any of the three testbenches; available for future test cases.
+
+**Known limitation (March Y only):** the testbench header notes that RDF
+(Read Disturb Fault) is not detectable by this March Y sequence — a write
+between the two reads of each element (`r0,w1,r1`) masks that fault class,
+since the write intentionally changes the expected value between reads.
+This is a property of the algorithm itself, not a testbench gap.
+
+
+- [x] Synthesis results comparison across variants
+- [x] Fault-injection test documentation

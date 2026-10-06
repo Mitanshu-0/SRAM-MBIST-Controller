@@ -105,10 +105,10 @@ module tb_mbist;
         $dumpfile("mbist_march_y.vcd");
         $dumpvars(0, tb_mbist);
         $display("==============================================");
-        $display("  MBIST — March Y");
+        $display("  MBIST - March Y");
         $display("  Sequence: {up(w0); up(r0,w1,r1); dn(r1,w0,r0); dn(r0)}");
         $display("  Operations: 8N  |  Coverage: SAF, TF, CFin");
-        $display("  NOTE: RDF not detectable — write between reads masks fault");
+        $display("  NOTE: RDF not detectable - write between reads masks fault");
         $display("==============================================");
 
         // Test 1: Clean memory — expect pass
@@ -156,7 +156,7 @@ module tb_mbist;
 
     initial begin
         #1_000_000;
-        $display("WATCHDOG: timeout");
+        $display("[%0t ns] FAIL | WATCHDOG: simulation timeout - bist_done never asserted", $time);
         $finish;
     end
 

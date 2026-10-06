@@ -104,7 +104,7 @@ module tb_mbist;
         $dumpfile("mbist.vcd");
         $dumpvars(0, tb_mbist);
         $display("==============================================");
-        $display("  MBIST — March C-");
+        $display("  MBIST - March C-");
         $display("==============================================");
 
         // Test 1: Clean — expect pass
@@ -152,7 +152,7 @@ module tb_mbist;
 
     initial begin
         #1_000_000;
-        $display("WATCHDOG: timeout");
+        $display("[%0t ns] FAIL | WATCHDOG: simulation timeout - bist_done never asserted", $time);
         $finish;
     end
 

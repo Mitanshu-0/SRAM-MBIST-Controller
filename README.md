@@ -20,16 +20,26 @@ This project implements three March algorithms at RTL and evaluates their behavi
 
 ### Architecture
 
-The overall MBIST architecture is organized around four main control and datapath components:
+The MBIST controller is organized around four main control and datapath components:
 
-1. **FSM Controller** — controls the March algorithm sequence and determines the required memory operation.
-2. **Address Generator** — generates and updates the SRAM address according to the current March direction.
-3. **Data Generator** — generates write data and the expected data used for read comparison.
-4. **Comparator** — compares SRAM read data with the expected value and detects memory failures.
+- **FSM Controller** — controls the March algorithm sequence and determines the required memory operation.
+- **Address Generator** — generates and updates the SRAM address according to the current March direction.
+- **Data Generator** — generates write data and the expected data used for read comparison.
+- **Comparator** — compares SRAM read data with the expected value and detects memory failures.
 
 These blocks interface with a **single-port synchronous SRAM**.
 
-![SRAM MBIST Controller Architecture](docs/sram_mbist_architecture.svg)
+### MBIST Architecture
+
+<p align="center">
+  <img src="docs/sram_mbist_architecture.svg" alt="SRAM MBIST Controller Architecture" width="850">
+</p>
+
+The architecture diagram above is stored in the repository at:
+
+```text
+docs/sram_mbist_architecture.svg
+```
 
 ### Architecture Flow
 
@@ -61,21 +71,14 @@ These blocks interface with a **single-port synchronous SRAM**.
                          |    Single-Port SRAM   |
                          +-----------------------+
                                     |
-                                    |
-                              mem_dout
+                                 mem_dout
                                     |
                                     +------> Comparator
 ```
 
 The control flow begins when `bist_start` is asserted. The FSM selects the current March operation, controls the address direction, selects the required data pattern, and determines whether the SRAM should perform a read or write operation.
 
-During a read operation, the SRAM output is compared with the expected value. A mismatch is recorded as a test failure. When all March elements are completed, the controller asserts the completion and final test-status signals.
-
-The architecture diagram is stored in:
-
-```text
-docs/sram_mbist_architecture.svg
-```
+During a read operation, the SRAM output is compared with the expected value. A mismatch indicates a memory failure. When all March elements are completed, the controller asserts the completion and final test-status signals.
 
 ---
 

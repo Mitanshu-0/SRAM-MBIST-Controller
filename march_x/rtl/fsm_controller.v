@@ -9,7 +9,7 @@
 //
 // Fault coverage : SAF, TF, CFin
 // Operations     : 6N
-// States         : 8
+// States         : 9
 // =============================================================================
 
 module fsm_controller #(
@@ -25,8 +25,8 @@ module fsm_controller #(
     output reg                   addr_gen_direction,
     output reg                   addr_gen_load,
     output reg  [ADDR_WIDTH-1:0] addr_gen_load_value,
-    output reg                   write_sel,         // 0=write 0s, 1=write 1s
-    output reg                   expect_sel,        // 0=expect 0s, 1=expect 1s
+    output reg                   write_sel,
+    output reg                   expect_sel,
     output reg                   comp_enable,
     output reg                   mem_we,
     output reg                   bist_done,
@@ -36,16 +36,17 @@ module fsm_controller #(
     localparam MAX_ADDR = {ADDR_WIDTH{1'b1}};
 
 
-    // States — 4 bits, 8 used
+    // States — 4 bits, 9 used
     localparam [3:0]
-        ST_IDLE  = 4'd0,
-        ST_M0_WR = 4'd1,    // M0: ↑(w0)
-        ST_M1_RD = 4'd2,    // M1: ↑(r0,w1)
-        ST_M1_WR = 4'd3,
-        ST_M2_RD = 4'd4,    // M2: ↓(r1,w0)
-        ST_M2_WR = 4'd5,
-        ST_M3_RD = 4'd6,    // M3: ↓(r0)
-        ST_DONE  = 4'd7;
+        ST_IDLE     = 4'd0,
+        ST_M0_WR    = 4'd1,    // M0: ↑(w0)
+        ST_M1_RD    = 4'd2,    // M1: ↑(r0,w1)
+        ST_M1_WR    = 4'd3,
+        ST_M2_RD    = 4'd4,    // M2: ↓(r1,w0)
+        ST_M2_WR    = 4'd5,
+        ST_M3_RD    = 4'd6,    // M3: ↓(r0)
+        ST_M3_FINAL = 4'd7,    // M3: final read result
+        ST_DONE     = 4'd8;
 
     reg [3:0] state, next_state;
 
@@ -60,15 +61,23 @@ module fsm_controller #(
     end
 
 
-    // Registered bist_pass
-    // Avoids a combinational glitch path from comp_error directly to bist_pass.
-    // Captured exactly once — on the clock edge that enters ST_DONE.
+    // Registered BIST result
     always @(posedge clk)
     begin
         if (!rst_n)
+        begin
             bist_pass <= 1'b0;
-        else if (next_state == ST_DONE && state != ST_DONE)
-            bist_pass <= ~comp_error;
+            bist_done <= 1'b0;
+        end
+        else
+        begin
+            bist_done <= (next_state == ST_DONE);
+
+            if (state == ST_M3_FINAL)
+                bist_pass <= ~comp_error;
+            else if (next_state == ST_DONE && state != ST_DONE)
+                bist_pass <= ~comp_error;
+        end
     end
 
 
@@ -85,8 +94,6 @@ module fsm_controller #(
         expect_sel          = 1'b0;
         comp_enable         = 1'b0;
         mem_we              = 1'b0;
-        bist_done           = 1'b0;
-
 
         case (state)
 
@@ -107,9 +114,9 @@ module fsm_controller #(
             ST_M0_WR:
             begin
                 mem_we             = 1'b1;
-                write_sel          = 1'b0;      // write 0
+                write_sel          = 1'b0;
                 addr_gen_enable    = 1'b1;
-                addr_gen_direction = 1'b0;       // UP
+                addr_gen_direction = 1'b0;
 
                 if (addr_gen_done)
                 begin
@@ -123,22 +130,17 @@ module fsm_controller #(
             // M1: ↑(r0, w1)
             ST_M1_RD:
             begin
-                // No counter advance, no write — just issue the read
                 next_state = ST_M1_WR;
             end
-
 
             ST_M1_WR:
             begin
                 comp_enable        = 1'b1;
-                expect_sel         = 1'b0;      // expected 0
-
+                expect_sel         = 1'b0;
                 mem_we             = 1'b1;
-                write_sel          = 1'b1;      // write 1
-                                                 
-
+                write_sel          = 1'b1;
                 addr_gen_enable    = 1'b1;
-                addr_gen_direction = 1'b0;      // UP
+                addr_gen_direction = 1'b0;
 
                 if (addr_gen_done)
                 begin
@@ -153,25 +155,20 @@ module fsm_controller #(
             end
 
 
-            // M2: ↓(r1, w0) — descending
+            // M2: ↓(r1, w0)
             ST_M2_RD:
             begin
-                // No counter advance, no write — just issue the read
                 next_state = ST_M2_WR;
             end
-
 
             ST_M2_WR:
             begin
                 comp_enable        = 1'b1;
-                expect_sel         = 1'b1;      // expected 1
-
+                expect_sel         = 1'b1;
                 mem_we             = 1'b1;
-                write_sel          = 1'b0;      // write 0
-                                                   // decoupled from expect_sel
-
+                write_sel          = 1'b0;
                 addr_gen_enable    = 1'b1;
-                addr_gen_direction = 1'b1;      // DOWN
+                addr_gen_direction = 1'b1;
 
                 if (addr_gen_done)
                 begin
@@ -190,22 +187,27 @@ module fsm_controller #(
             ST_M3_RD:
             begin
                 comp_enable        = 1'b1;
-                expect_sel         = 1'b0;      // expect 0
-
+                expect_sel         = 1'b0;
                 addr_gen_enable    = 1'b1;
-                addr_gen_direction = 1'b1;      // DOWN
+                addr_gen_direction = 1'b1;
 
                 if (addr_gen_done)
-                    next_state = ST_DONE;
+                    next_state = ST_M3_FINAL;
             end
 
 
-            // DONE — BIST completed
+            // M3 final read-result cycle
+            ST_M3_FINAL:
+            begin
+                comp_enable = 1'b1;
+                expect_sel  = 1'b0;
+                next_state  = ST_DONE;
+            end
+
+
+            // DONE
             ST_DONE:
             begin
-                bist_done = 1'b1;
-
-                // bist_pass is registered separately — see always block above
                 next_state = ST_DONE;
             end
 
@@ -216,8 +218,11 @@ module fsm_controller #(
         endcase
 
 
-        // Early-exit on error — skip remaining test, save power
-        if (comp_error && (state != ST_DONE) && (state != ST_IDLE))
+        // Early-exit on error — save power
+        if (comp_error &&
+            (state != ST_DONE) &&
+            (state != ST_IDLE) &&
+            (state != ST_M3_FINAL))
             next_state = ST_DONE;
 
     end

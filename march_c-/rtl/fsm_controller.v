@@ -57,16 +57,20 @@ module fsm_controller #(
 
 
     // State register
-    always @(posedge clk) begin
-        if (!rst_n) state <= ST_IDLE;
-        else        state <= next_state;
+    always @(posedge clk) 
+    begin
+        if (!rst_n) 
+            state <= ST_IDLE;
+        else        
+            state <= next_state;
     end
 
 
     // Registered bist_pass
     // Avoids a combinational glitch path from comp_error directly to bist_pass.
     // Captured exactly once — on the clock edge that enters ST_DONE.
-    always @(posedge clk) begin
+    always @(posedge clk) 
+    begin
         if (!rst_n)
             bist_pass <= 1'b0;
         else if (next_state == ST_DONE && state != ST_DONE)
@@ -92,8 +96,10 @@ module fsm_controller #(
 
 
             // IDLE → M0_WR
-            ST_IDLE: begin
-                if (bist_start) begin
+            ST_IDLE: 
+            begin
+                if (bist_start)
+                begin
                     addr_gen_load       = 1'b1;
                     addr_gen_load_value = {ADDR_WIDTH{1'b0}};
                     next_state          = ST_M0_WR;
@@ -102,12 +108,14 @@ module fsm_controller #(
 
 
             // M0: ↑(w0) — write 0 to every address, ascending
-            ST_M0_WR: begin
+            ST_M0_WR: 
+            begin
                 mem_we             = 1'b1;
                 write_sel          = 1'b0;      // write 0
                 addr_gen_enable    = 1'b1;
                 addr_gen_direction = 1'b0;
-                if (addr_gen_done) begin
+                if (addr_gen_done) 
+                begin
                     addr_gen_load       = 1'b1;
                     addr_gen_load_value = {ADDR_WIDTH{1'b0}};
                     next_state          = ST_M1_RD;
@@ -116,23 +124,28 @@ module fsm_controller #(
 
 
             // M1: ↑(r0, w1)
-            ST_M1_RD: begin
+            ST_M1_RD: 
+            begin
                 // No counter advance, no write — just issue the read
                 next_state = ST_M1_WR;
             end
 
-            ST_M1_WR: begin
+            ST_M1_WR: 
+            begin
                 comp_enable        = 1'b1;
                 expect_sel         = 1'b0;      // we expected 0
                 mem_we             = 1'b1;
                 write_sel          = 1'b1;      // write 1  ← decoupled from expect_sel
                 addr_gen_enable    = 1'b1;
                 addr_gen_direction = 1'b0;
-                if (addr_gen_done) begin
+                if (addr_gen_done) 
+                begin
                     addr_gen_load       = 1'b1;
                     addr_gen_load_value = {ADDR_WIDTH{1'b0}};
                     next_state          = ST_M2_RD;
-                end else begin
+                end 
+                else 
+                begin
                     next_state = ST_M1_RD;
                 end
             end
@@ -140,73 +153,89 @@ module fsm_controller #(
 
 
             // M2: ↑(r1, w0)
-            ST_M2_RD: begin
+            ST_M2_RD: 
+            begin
                 next_state = ST_M2_WR;
             end
 
-            ST_M2_WR: begin
+            ST_M2_WR: 
+            begin
                 comp_enable        = 1'b1;
                 expect_sel         = 1'b1;      // expected 1
                 mem_we             = 1'b1;
                 write_sel          = 1'b0;      // write 0  ← decoupled
                 addr_gen_enable    = 1'b1;
                 addr_gen_direction = 1'b0;
-                if (addr_gen_done) begin
+                if (addr_gen_done) 
+                begin
                     addr_gen_load       = 1'b1;
                     addr_gen_load_value = MAX_ADDR;
                     next_state          = ST_M3_RD;
-                end else begin
+                end 
+                else 
+                begin
                     next_state = ST_M2_RD;
                 end
             end
 
             // M3: ↓(r0, w1) — descending
-            ST_M3_RD: begin
+            ST_M3_RD: 
+            begin
                 next_state         = ST_M3_WR;  
             end
 
-            ST_M3_WR: begin
+            ST_M3_WR: 
+            begin
                 comp_enable        = 1'b1;
                 expect_sel         = 1'b0;      // expected 0
                 mem_we             = 1'b1;
                 write_sel          = 1'b1;      // write 1
                 addr_gen_enable    = 1'b1;
                 addr_gen_direction = 1'b1;
-                if (addr_gen_done) begin
+                if (addr_gen_done) 
+                begin
                     addr_gen_load       = 1'b1;
                     addr_gen_load_value = MAX_ADDR;
                     next_state          = ST_M4_RD;
-                end else begin
+                end 
+                else 
+                begin
                     next_state = ST_M3_RD;
                 end
             end
 
 
             // M4: ↓(r1, w0) — descending
-            ST_M4_RD: begin
+            ST_M4_RD: 
+            begin
                 addr_gen_direction = 1'b1;
                 next_state         = ST_M4_WR;
             end
 
-            ST_M4_WR: begin
+            ST_M4_WR: 
+            begin
                 comp_enable        = 1'b1;
                 expect_sel         = 1'b1;      // expected 1
                 mem_we             = 1'b1;
                 write_sel          = 1'b0;      // write 0
                 addr_gen_enable    = 1'b1;
                 addr_gen_direction = 1'b1;
-                if (addr_gen_done) begin
+                if (addr_gen_done) 
+                begin
                     addr_gen_load       = 1'b1;
                     addr_gen_load_value = {ADDR_WIDTH{1'b0}};
                     next_state          = ST_M5_RD;
-                end else begin
+                end 
+                else 
+                begin
                     next_state = ST_M4_RD;
                 end
             end
 
 
             // M5: ↑(r0) — read only, no write
-            ST_M5_RD: begin
+            ST_M5_RD: 
+            begin
                 comp_enable        = 1'b1;
                 expect_sel         = 1'b0;      // expect 0
                 addr_gen_enable    = 1'b1;
@@ -214,7 +243,8 @@ module fsm_controller #(
                 if (addr_gen_done) next_state = ST_DONE;
             end
 
-            ST_DONE: begin
+            ST_DONE: 
+            begin
                 bist_done  = 1'b1;
                 // bist_pass is registered separately — see always block above
                 next_state = ST_DONE;

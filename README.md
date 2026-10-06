@@ -1,58 +1,87 @@
 # SRAM MBIST Controller
 
-A Verilog RTL implementation of a Memory Built-In Self-Test (MBIST) controller for a single-port synchronous SRAM, with three March-based test algorithms implemented as independent controller variants:
+A Verilog RTL implementation of a **Memory Built-In Self-Test (MBIST)** controller for a single-port synchronous SRAM. The project implements three March-based memory test algorithms as independent RTL variants:
 
 - **March C-**
 - **March X**
 - **March Y**
 
-The project uses a common MBIST datapath for address generation, test-data generation, and comparison, while the algorithm-specific FSM determines the sequence of memory operations. The three implementations are also synthesized using Cadence Genus to compare their hardware cost and timing.
+All three implementations use a common MBIST datapath consisting of an FSM controller, address generator, data generator, and comparator. The algorithm-specific FSM determines the sequence of memory operations required by each March algorithm.
+
+The three implementations are also synthesized using **Cadence Genus** to compare their area, power, timing, and control complexity.
 
 ---
 
 ## 1. Overview
 
-Memory Built-In Self-Test (MBIST) provides on-chip logic for testing embedded memories without requiring an external tester to generate every memory operation.
+Memory Built-In Self-Test (MBIST) integrates dedicated test logic around an embedded memory so that the memory can be tested using internally generated addresses, data patterns, read/write operations, and comparison logic.
 
-This project implements three March algorithms at RTL and evaluates them using the same basic MBIST datapath:
+This project implements three March algorithms at RTL and evaluates their behavior through simulation, fault injection, and synthesis.
 
-```text
-                +----------------------+
-                |    MBIST Controller  |
-                |                      |
-                |  +----------------+  |
-bist_start --->|  | FSM Controller  |  |
-                |  +-------+--------+  |
-                |          |           |
-                |  +-------v--------+  |
-                |  | Address        |  |
-                |  | Generator      |  |
-                |  +-------+--------+  |
-                |          |           |
-                |  +-------v--------+  |
-                |  | Data Generator |  |
-                |  +-------+--------+  |
-                |          |           |
-                |  +-------v--------+  |
-                |  | Comparator     |  |
-                |  +----------------+  |
-                +----------+-----------+
-                           |
-                           v
-                    Single-Port SRAM
-```
+### Architecture
 
-The architecture diagram used in this repository is available at:
+The overall MBIST architecture is organized around four main control and datapath components:
 
-`docs/sram_mbist_architecture.svg`
+1. **FSM Controller** — controls the March algorithm sequence and determines the required memory operation.
+2. **Address Generator** — generates and updates the SRAM address according to the current March direction.
+3. **Data Generator** — generates write data and the expected data used for read comparison.
+4. **Comparator** — compares SRAM read data with the expected value and detects memory failures.
+
+These blocks interface with a **single-port synchronous SRAM**.
 
 ![SRAM MBIST Controller Architecture](docs/sram_mbist_architecture.svg)
+
+### Architecture Flow
+
+```text
+                    +--------------------------------+
+                    |        MBIST Controller       |
+                    |                                |
+ bist_start ------->|       +----------------+       |
+                    |       | FSM Controller |       |
+                    |       +-------+--------+       |
+                    |               |                |
+                    |       +-------v--------+       |
+                    |       | Address        |       |
+                    |       | Generator      |       |
+                    |       +-------+--------+       |
+                    |               |                |
+                    |       +-------v--------+       |
+                    |       | Data Generator |       |
+                    |       +-------+--------+       |
+                    |               |                |
+                    |       +-------v--------+       |
+                    |       | Comparator     |<------+
+                    |       +----------------+       |
+                    +---------------+----------------+
+                                    |
+                                    | SRAM interface
+                                    v
+                         +-----------------------+
+                         |    Single-Port SRAM   |
+                         +-----------------------+
+                                    |
+                                    |
+                              mem_dout
+                                    |
+                                    +------> Comparator
+```
+
+The control flow begins when `bist_start` is asserted. The FSM selects the current March operation, controls the address direction, selects the required data pattern, and determines whether the SRAM should perform a read or write operation.
+
+During a read operation, the SRAM output is compared with the expected value. A mismatch is recorded as a test failure. When all March elements are completed, the controller asserts the completion and final test-status signals.
+
+The architecture diagram is stored in:
+
+```text
+docs/sram_mbist_architecture.svg
+```
 
 ---
 
 ## 2. Algorithms
 
-The project implements three different March algorithms using the same overall datapath.
+The project implements three different March algorithms using the same overall MBIST datapath.
 
 | Algorithm | Operations | FSM States | Main Characteristics |
 |---|---:|---:|---|
@@ -63,11 +92,11 @@ The project implements three different March algorithms using the same overall d
 ### March C-
 
 ```text
-↑(w0);
-↑(r0,w1);
-↑(r1,w0);
-↓(r0,w1);
-↓(r1,w0);
+↑(w0)
+↑(r0,w1)
+↑(r1,w0)
+↓(r0,w1)
+↓(r1,w0)
 ↑(r0)
 ```
 
@@ -76,9 +105,9 @@ March C- uses six March elements and provides the broadest coverage of the three
 ### March X
 
 ```text
-↑(w0);
-↑(r0,w1);
-↓(r1,w0);
+↑(w0)
+↑(r0,w1)
+↓(r1,w0)
 ↓(r0)
 ```
 
@@ -87,9 +116,9 @@ March X uses fewer memory operations and fewer FSM states, resulting in a smalle
 ### March Y
 
 ```text
-↑(w0);
-↑(r0,w1,r1);
-↓(r1,w0,r0);
+↑(w0)
+↑(r0,w1,r1)
+↓(r1,w0,r0)
 ↓(r0)
 ```
 
@@ -99,56 +128,85 @@ March Y adds an additional read-back after the write operation in its middle Mar
 
 ## 3. RTL Architecture
 
-Each algorithm uses the same basic MBIST datapath.
+Each algorithm uses the same fundamental MBIST datapath, while the FSM controller changes according to the selected March algorithm.
 
-### Address Generator
+### 3.1 FSM Controller
 
-The address generator produces the SRAM address and supports the required ascending and descending address traversal.
+The FSM controller is the main control block of the MBIST design.
 
-It is controlled by the algorithm-specific FSM and provides:
+It determines:
 
-- Address loading
-- Address increment
-- Address decrement
-- Address-direction control
-
-### Data Generator
-
-The data generator produces:
-
-- Data written to SRAM
-- Expected data used during read comparisons
-
-The generated patterns depend on the current March operation.
-
-### Comparator
-
-The comparator checks the SRAM read data against the expected value.
-
-A mismatch produces a comparison error that is used by the MBIST controller to determine the test result.
-
-### FSM Controller
-
-The FSM controller is the algorithm-specific part of the design.
-
-It controls:
-
-- SRAM read/write operations
+- Current March element
+- Read/write operation
 - Address direction
-- Address loading
+- Address initialization
 - Data-pattern selection
 - Expected-data selection
-- March-element sequencing
+- Test progression
 - Test completion
 - Pass/fail status
 
-The datapath remains structurally similar across all three variants, while the FSM implements the corresponding March sequence.
+The FSM therefore defines the algorithmic behavior of each MBIST variant.
+
+### 3.2 Address Generator
+
+The address generator produces the SRAM address required by the current March operation.
+
+It supports:
+
+- Address initialization
+- Address increment
+- Address decrement
+- Ascending address traversal
+- Descending address traversal
+- End-of-range detection
+
+The FSM controls the direction and operation of the address generator.
+
+### 3.3 Data Generator
+
+The data generator produces the data pattern required by the current memory operation.
+
+It provides:
+
+- Write data for SRAM write operations
+- Expected data for SRAM read operations
+
+The generated pattern is selected according to the current March element.
+
+### 3.4 Comparator
+
+The comparator checks the SRAM output against the expected data generated by the MBIST datapath.
+
+```text
+SRAM Read Data
+      |
+      v
++-------------+
+| Comparator  |<----- Expected Data
++------+------+
+       |
+       v
+   Error Flag
+```
+
+If the actual SRAM data differs from the expected value, the MBIST controller records a memory failure.
+
+### 3.5 SRAM Interface
+
+The MBIST controller interfaces with a single-port synchronous SRAM through address, data, enable, and write-control signals.
+
+The behavioral SRAM model is used for simulation and fault-injection experiments. It is not included in the synthesized MBIST controller logic.
 
 ---
 
 ## 4. MBIST Interface
 
-The top-level module is `mbist_top`.
+The top-level module is:
+
+```text
+mbist_top
+```
 
 | Signal | Direction | Description |
 |---|---|---|
@@ -163,7 +221,35 @@ The top-level module is `mbist_top`.
 | `mem_we` | Output | SRAM write enable |
 | `mem_en` | Output | SRAM enable |
 
-The behavioral SRAM model is used for simulation and is not part of the synthesized MBIST controller.
+The general operation is:
+
+```text
+             bist_start
+                  |
+                  v
+           +-------------+
+           | MBIST FSM   |
+           +------+------+
+                  |
+          Memory Operations
+                  |
+                  v
+            +---------+
+            |  SRAM   |
+            +----+----+
+                 |
+              Read Data
+                 |
+                 v
+           +-------------+
+           | Comparator  |
+           +------+------+
+                  |
+             Error Status
+                  |
+                  v
+          bist_pass / bist_done
+```
 
 ---
 
@@ -209,13 +295,13 @@ SRAM-MBIST-Controller/
 └── README.md
 ```
 
-The three algorithm directories are intentionally organized in the same way so that their RTL, simulation models, testbenches, and simulation scripts can be compared consistently.
+The three algorithm directories follow the same organization so that their RTL, simulation models, testbenches, and simulation scripts can be evaluated consistently.
 
 ---
 
 ## 6. Simulation
 
-Each algorithm has its own simulation environment.
+Each algorithm has an independent simulation environment.
 
 The testbench is:
 
@@ -223,39 +309,39 @@ The testbench is:
 tb/tb_mbist.v
 ```
 
-and the behavioral SRAM model is:
+The behavioral SRAM model is:
 
 ```text
 sim_models/memory_model.v
 ```
 
-The simulation can be launched using the corresponding batch script:
+Simulation can be launched using:
 
 ```text
 sim/run.bat
 ```
 
-For example, from the March C- directory:
+For example, for March C-:
 
 ```cmd
 cd march_c-\sim
 run.bat
 ```
 
-The same procedure can be used for:
+The corresponding scripts are also available for:
 
 ```text
 march_x/sim/run.bat
 march_y/sim/run.bat
 ```
 
-The simulation environment verifies both normal memory operation and fault-injected cases.
+The simulation environment verifies normal MBIST operation as well as fault-injected memory behavior.
 
 ---
 
 ## 7. Fault-Injection Verification
 
-The behavioral SRAM model provides fault-injection mechanisms for testing the MBIST controller.
+The behavioral SRAM model provides fault-injection mechanisms for evaluating the ability of the MBIST algorithms to detect memory faults.
 
 The verification sequence includes:
 
@@ -267,9 +353,9 @@ The verification sequence includes:
 | T4 | Faults present before test start | Fail |
 | T5 | Two consecutive fault-free runs | Pass, Pass |
 
-The fault-injection tests are applied consistently across the three algorithm variants so their behavior can be compared under the same simulation conditions.
+The fault-injection tests are applied consistently across the three algorithm variants so that their behavior can be compared under equivalent simulation conditions.
 
-The memory model also contains an `inject_corruption` mechanism for arbitrary single-shot corruption experiments, although it is not currently exercised by the standard test sequence.
+The memory model also contains an `inject_corruption` mechanism for arbitrary single-shot corruption experiments. This mechanism is available for additional experiments but is not part of the standard verification sequence.
 
 ---
 
@@ -398,7 +484,7 @@ run.tcl
 
 **March Y** performs fewer operations than March C-, but its additional read-back and comparison logic increases hardware cost and power.
 
-These results demonstrate that **the number of March operations alone does not determine hardware cost**. The type of operation and the control logic required to implement it also affect area, power, and timing.
+These results demonstrate that the number of March operations alone does not determine hardware cost. The type of memory operation and the control logic required to implement it also affect area, power, and timing.
 
 ---
 
@@ -408,7 +494,7 @@ This repository focuses on the RTL implementation, simulation-based fault inject
 
 The SRAM used during verification is a behavioral model. The Genus results represent the synthesized MBIST controller logic rather than a physical SRAM macro.
 
-The fault-injection experiments represent logical fault models applied to the behavioral memory model; they should not be interpreted as direct measurements of physical SRAM defect coverage.
+The fault-injection experiments represent logical fault models applied to the behavioral memory model and should not be interpreted as direct measurements of physical SRAM defect coverage.
 
 ---
 
